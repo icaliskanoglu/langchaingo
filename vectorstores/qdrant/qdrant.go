@@ -30,8 +30,18 @@ func New(opts ...Option) (Store, error) {
 
 func (s Store) AddDocuments(ctx context.Context,
 	docs []schema.Document,
-	_ ...vectorstores.Option,
+	options ...vectorstores.Option,
 ) ([]string, error) {
+	opts := s.getOptions(options...)
+
+	docs = s.deduplicate(ctx, opts, docs)
+
+	if len(docs) == 0 {
+		// nothing to add (perhaps all documents were duplicates). This is not
+		// an error.
+		return nil, nil
+	}
+
 	texts := make([]string, 0, len(docs))
 	for _, doc := range docs {
 		texts = append(texts, doc.PageContent)
@@ -117,4 +127,22 @@ func (s Store) getOptions(options ...vectorstores.Option) vectorstores.Options {
 		opt(&opts)
 	}
 	return opts
+}
+
+func (s Store) deduplicate(ctx context.Context,
+	opts vectorstores.Options,
+	docs []schema.Document,
+) []schema.Document {
+	if opts.Deduplicater == nil {
+		return docs
+	}
+
+	filtered := make([]schema.Document, 0, len(docs))
+	for _, doc := range docs {
+		if !opts.Deduplicater(ctx, doc) {
+			filtered = append(filtered, doc)
+		}
+	}
+
+	return filtered
 }
