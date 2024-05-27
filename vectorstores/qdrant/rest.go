@@ -121,6 +121,64 @@ func (s Store) searchPoints(
 	return docs, nil
 }
 
+func (s Store) scroll(
+	ctx context.Context,
+	baseURL *url.URL,
+	numVectors int,
+	filter any,
+) ([]schema.Document, error) {
+	payload := scrollBody{
+		WithPayload: true,
+		WithVector:  false,
+		Limit:       numVectors,
+		Filter:      filter,
+	}
+
+	url := baseURL.JoinPath("collections", s.collectionName, "points", "scroll")
+	body,
+		statusCode,
+		err := DoRequest(
+		ctx, *url,
+		s.apiKey,
+		http.MethodPost,
+		payload,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	if statusCode != http.StatusOK {
+		return nil, newAPIError("querying collection", body)
+	}
+
+	var response searchResponse
+
+	decoder := json.NewDecoder(body)
+	err = decoder.Decode(&response)
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]schema.Document, len(response.Result))
+	for i, match := range response.Result {
+		pageContent, ok := match.Payload[s.contentKey].(string)
+		if !ok {
+			return nil, fmt.Errorf("payload does not contain content key '%s'", s.contentKey)
+		}
+		delete(match.Payload, s.contentKey)
+
+		doc := schema.Document{
+			PageContent: pageContent,
+			Metadata:    match.Payload,
+			Score:       match.Score,
+		}
+
+		docs[i] = doc
+	}
+
+	return docs, nil
+}
+
 // doRequest performs an HTTP request to the Qdrant API.
 func DoRequest(ctx context.Context,
 	url url.URL,

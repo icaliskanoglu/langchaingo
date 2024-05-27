@@ -84,6 +84,18 @@ func (s Store) SimilaritySearch(ctx context.Context,
 	return s.searchPoints(ctx, &s.qdrantURL, vector, numDocuments, scoreThreshold, filters)
 }
 
+func (s Store) PayloadSearch(
+	ctx context.Context,
+	numDocuments int,
+	options ...vectorstores.Option,
+) ([]schema.Document, error) {
+	opts := s.getOptions(options...)
+
+	filters := s.getFilters(opts)
+
+	return s.scroll(ctx, &s.qdrantURL, numDocuments, filters)
+}
+
 func (s Store) getScoreThreshold(opts vectorstores.Options) (float32, error) {
 	if opts.ScoreThreshold < 0 || opts.ScoreThreshold > 1 {
 		return 0, errors.New("score threshold must be between 0 and 1")

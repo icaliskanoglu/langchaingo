@@ -32,3 +32,10 @@ type searchBody struct {
 	WithVector     bool      `json:"with_vector"`
 	WithPayload    bool      `json:"with_payload"`
 }
+
+type scrollBody struct {
+	Filter      any  `json:"filter"`
+	Limit       int  `json:"limit"`
+	WithVector  bool `json:"with_vector"`
+	WithPayload bool `json:"with_payload"`
+}
