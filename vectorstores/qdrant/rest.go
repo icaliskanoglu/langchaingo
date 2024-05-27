@@ -152,15 +152,16 @@ func (s Store) scroll(
 		return nil, newAPIError("querying collection", body)
 	}
 
-	var response searchResponse
+	var response scrollResponse
 
 	decoder := json.NewDecoder(body)
 	err = decoder.Decode(&response)
 	if err != nil {
 		return nil, err
 	}
-	docs := make([]schema.Document, len(response.Result))
-	for i, match := range response.Result {
+	docs := make([]schema.Document, len(response.Result.Points))
+	for i, match := range response.Result.Points {
+
 		pageContent, ok := match.Payload[s.contentKey].(string)
 		if !ok {
 			return nil, fmt.Errorf("payload does not contain content key '%s'", s.contentKey)
@@ -170,7 +171,6 @@ func (s Store) scroll(
 		doc := schema.Document{
 			PageContent: pageContent,
 			Metadata:    match.Payload,
-			Score:       match.Score,
 		}
 
 		docs[i] = doc

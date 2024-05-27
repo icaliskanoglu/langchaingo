@@ -24,6 +24,19 @@ type searchResponse struct {
 	Result []result `json:"result"`
 }
 
+type scrollPoint struct {
+	ID      string                 `json:"id"`
+	Payload map[string]interface{} `json:"payload"`
+}
+
+type scrollResult struct {
+	Points []scrollPoint `json:"points"`
+}
+
+type scrollResponse struct {
+	Result scrollResult `json:"result"`
+}
+
 type searchBody struct {
 	Vector         []float32 `json:"vector"`
 	Filter         any       `json:"filter"`
