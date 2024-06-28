@@ -69,6 +69,24 @@ func New(ctx context.Context, opts ...Option) (*Store, error) {
 	return s, nil
 }
 
+func (s Store) deduplicate(ctx context.Context,
+	opts vectorstores.Options,
+	docs []schema.Document,
+) []schema.Document {
+	if opts.Deduplicater == nil {
+		return docs
+	}
+
+	filtered := make([]schema.Document, 0, len(docs))
+	for _, doc := range docs {
+		if !opts.Deduplicater(ctx, doc) {
+			filtered = append(filtered, doc)
+		}
+	}
+
+	return filtered
+}
+
 // AddDocuments adds the text and metadata from the documents to the redis associated with 'Store'.
 // and returns the ids of the added documents.
 // Note: currently save documents with Hset command
@@ -76,7 +94,20 @@ func New(ctx context.Context, opts ...Option) (*Store, error) {
 //
 //	if doc.metadata has `keys` or `ids` field, the docId will use `keys` or `ids` value
 //	if not, the docId is uuid string
-func (s *Store) AddDocuments(ctx context.Context, docs []schema.Document, _ ...vectorstores.Option) ([]string, error) {
+func (s Store) AddDocuments(ctx context.Context,
+	docs []schema.Document,
+	options ...vectorstores.Option,
+) ([]string, error) {
+	opts := s.getOptions(options...)
+
+	docs = s.deduplicate(ctx, opts, docs)
+
+	if len(docs) == 0 {
+		// nothing to add (perhaps all documents were duplicates). This is not
+		// an error.
+		return nil, nil
+	}
+
 	err := s.appendDocumentsWithVectors(ctx, docs)
 	if err != nil {
 		return nil, err
@@ -148,6 +179,38 @@ func (s *Store) SimilaritySearch(ctx context.Context, query string, numDocuments
 	}
 
 	_, docs, err := s.client.Search(ctx, *search)
+	if err != nil {
+		return nil, err
+	}
+	return docs, nil
+}
+
+func (s *Store) MetadataSearch(ctx context.Context, numDocuments int, options ...vectorstores.Option) ([]schema.Document,
+	error) {
+	opts := s.getOptions(options...)
+	scoreThreshold, err := s.getScoreThreshold(opts)
+	if err != nil {
+		return nil, err
+	}
+	filter, err := s.getFilters(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	searchOpts := []SearchOption{WithScoreThreshold(scoreThreshold), WithOffsetLimit(0, numDocuments), WithPreFilters(filter)}
+	if s.indexSchema != nil {
+		searchOpts = append(searchOpts, WithReturns(maps.Keys(s.indexSchema.MetadataKeys())))
+	}
+
+	search, err := NewIndexMetadataSearch(
+		s.indexName,
+		searchOpts...,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	_, docs, err := s.client.MetadataSearch(ctx, *search)
 	if err != nil {
 		return nil, err
 	}

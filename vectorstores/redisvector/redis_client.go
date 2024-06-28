@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"reflect"
-	"strconv"
-
 	"github.com/google/uuid"
 	"github.com/redis/rueidis"
 	"github.com/tmc/langchaingo/schema"
 	"golang.org/x/exp/maps"
+	"log/slog"
+	"reflect"
+	"strconv"
 )
 
 // RedisClient interface of redis client, easy to replace third redis client package
@@ -24,6 +23,7 @@ type RedisClient interface {
 	AddDocsWithHash(ctx context.Context, prefix string, docs []schema.Document) ([]string, error)
 	// TODO AddDocsWithJSON
 	Search(ctx context.Context, search IndexVectorSearch) (int64, []schema.Document, error)
+	MetadataSearch(ctx context.Context, search IndexVectorSearch) (int64, []schema.Document, error)
 }
 
 type RueidisClient struct {
@@ -102,6 +102,17 @@ func (c RueidisClient) AddDocsWithHash(ctx context.Context, prefix string, docs 
 func (c RueidisClient) Search(ctx context.Context, search IndexVectorSearch) (int64, []schema.Document, error) {
 	cmds := search.AsCommand()
 	// fmt.Println(strings.Join(cmds, " "))
+	total, docs, err := c.client.Do(ctx, c.client.B().Arbitrary(cmds[0]).Keys(cmds[1]).Args(cmds[2:]...).Build()).AsFtSearch()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return total, convertFTSearchResIntoDocSchema(docs), nil
+}
+
+func (c RueidisClient) MetadataSearch(ctx context.Context, search IndexVectorSearch) (int64, []schema.Document, error) {
+	cmds := search.AsMetadataSearchCommand()
+	//fmt.Println(strings.Join(cmds, " "))
 	total, docs, err := c.client.Do(ctx, c.client.B().Arbitrary(cmds[0]).Keys(cmds[1]).Args(cmds[2:]...).Build()).AsFtSearch()
 	if err != nil {
 		return 0, nil, err
